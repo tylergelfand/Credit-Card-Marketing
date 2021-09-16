@@ -1,0 +1,202 @@
+---
+title: "Credit Card Marketing"
+output: html_notebook
+---
+
+
+```{r}
+library(pacman)
+p_load(rpart, tidyverse, rpart.plot)
+CreditCard <- read.csv("Credit Card.csv")
+CreditCard <- CreditCard %>% na.omit()
+#View(CreditCard)
+```
+
+Classification Tree
+
+```{r}
+
+Tree <- rpart(Accepted ~ Reward + MailerType + IncomeLevel + NumBankAccountsOpen + OverdraftProtection + CreditRating + NumCreditCardsHeld + NumHomesOwned + HouseholdSize + OwnYourHome + AverageBalance, data=CreditCard, control = rpart.control(cp = 0.0001))
+
+bestcp <- Tree$cptable[which.min(Tree$cptable[,"xerror"]),"CP"]
+
+prunedTree <- prune(Tree, cp = bestcp)
+
+rpart.plot(prunedTree, type = 5)
+```
+
+
+```{r}
+prp(prunedTree,
+type = 4, 
+clip.right.labs = FALSE, 
+extra = 101,
+under = TRUE, 
+under.cex = 1, 
+fallen.leaves = TRUE, 
+box.palette = "RdYlGn", 
+branch = .3, 
+round = 0, 
+leaf.round = 9,
+prefix = "Accepted", 
+main = "Credit Card Marketing",
+cex.main = 1.5, 
+branch.col = "gray",
+branch.lwd = 2) 
+```
+
+
+ROC Curve- Classification Tree(Non-Partitioned)
+
+```{r}
+p_load(ROCR)
+
+PredictedAcceptedProbabilities <- predict(prunedTree)
+
+ROC_Predictions <- prediction(predictions = PredictedAcceptedProbabilities, labels = CreditCard$Accepted)
+
+ROC_Performance <- performance(ROC_Predictions, "sens", "fpr")
+
+plot(ROC_Performance, xlab = "False Positive Rate (1 - Specificity)", ylab="Sensitivity")
+AUC <- performance(ROC_Predictions, "auc")
+AUC <- as.numeric(AUC@y.values[1])
+text(0.8,0.2, paste("AUC = " , round(AUC,3)))
+abline(0,1)
+```
+
+Confusion Matrix
+
+```{r}
+p_load(caret)
+cutoff <- 0.5
+PredictedClass <- as.factor(ifelse(PredictedAcceptedProbabilities >= cutoff, 1, 0))
+Targets <- as.factor(CreditCard$Accepted)
+ConfusionMatrix <- caret::confusionMatrix(data=PredictedClass, reference = Targets, positive="1")
+ConfusionMatrix
+```
+
+
+Classification Tree (Partitioned)
+
+```{r}
+set.seed(112321)
+library(pacman, tidyverse, ROCR)
+p_load(rpart, tidyverse, rpart.plot)
+
+#Add in the row number - unique ID
+CreditCard <- CreditCard %>% mutate(
+                              id = row_number())
+
+# Sample randomly 70% to be our training set:
+CreditCardTrain <- CreditCard %>% sample_frac(0.7)
+
+#Take the rest (anti-join) to be our test set:
+CreditCardTest <- CreditCard %>% anti_join(CreditCardTrain, by="id")
+
+```
+
+
+```{r}
+Tree <- rpart(Accepted ~ Reward + MailerType + IncomeLevel + NumBankAccountsOpen + OverdraftProtection + CreditRating + NumCreditCardsHeld + NumHomesOwned +  OwnYourHome , data=CreditCardTrain, control = rpart.control(cp = 0.0001))
+
+bestcp <- Tree$cptable[which.min(Tree$cptable[,"xerror"]),"CP"]
+
+prunedTree <- prune(Tree, cp = bestcp)
+
+rpart.plot(prunedTree, type = 5)
+
+```
+
+
+
+```{r}
+prp(prunedTree,
+type = 4, 
+clip.right.labs = FALSE, 
+extra = 101,
+under = TRUE, 
+under.cex = 1, 
+fallen.leaves = TRUE, 
+box.palette = "RdYlGn", 
+branch = .3, 
+round = 0, 
+leaf.round = 9,
+prefix = "Accepted", 
+main = "Credit Card Marketing",
+cex.main = 1.5, 
+branch.col = "gray",
+branch.lwd = 2) 
+```
+
+
+
+
+ROC Curve (Partitioned)
+```{r}
+#In the training set:
+PredictedAcceptedProbabilitiesTrain <- predict(prunedTree)
+ROC_Predictions_Train <- prediction(predictions = PredictedAcceptedProbabilitiesTrain, labels = CreditCardTrain$Accepted)
+ROC_Performance_Train <- performance(ROC_Predictions_Train, "sens", "fpr")
+plot(ROC_Performance_Train, xlab = "False Positive Rate (1 - Specificity)", ylab="Sensitivity", lty=1, col="red")
+AUC_Train <- performance(ROC_Predictions_Train, "auc")
+AUC_Train <- as.numeric(AUC_Train@y.values[1])
+text(0.8,0.2, paste("AUC Train= " , round(AUC_Train,3)))
+
+##Now in the Test Set: 
+PredictedAcceptedProbabilitiesTest <- predict(prunedTree, newdata=CreditCardTest)
+ROC_Predictions_Test <- prediction(predictions = PredictedAcceptedProbabilitiesTest, labels = CreditCardTest$Accepted)
+ROC_Performance_Test <- performance(ROC_Predictions_Test, "sens", "fpr")
+plot(ROC_Performance_Test, xlab = "False Positive Rate (1 - Specificity)", ylab="Sensitivity", add=TRUE, lty=2, col="green")
+AUC_Test <- performance(ROC_Predictions_Test, "auc")
+AUC_Test <- as.numeric(AUC_Test@y.values[1])
+text(0.8,0.1, paste("AUC Test= " , round(AUC_Test,3)))
+```
+
+
+Random Forest
+
+
+```{r}
+
+set.seed(112321)
+p_load(rpart, tidyverse, rpart.plot, randomForest, ROCR)
+
+
+#Add in the row number - unique ID
+CreditCard <- CreditCard %>% mutate(
+                              id = row_number())
+
+# Sample randomly 70% to be our training set:
+CreditCardTrain <- CreditCard %>% sample_frac(0.7)
+
+#Take the rest (anti-join) to be our test set:
+CreditCardTest <- CreditCard %>% anti_join(CreditCardTrain, by="id")
+```
+
+ntree = how many trees in the forest? 
+mtry = how many predictor variables in each tree? 
+importance = calculate variable importance? 
+sampsize = how many observations in each tree? 
+
+```{r}
+forest <- randomForest(as.factor(OfferAccepted) ~ Reward + MailerType + IncomeLevel + NumBankAccountsOpen + OverdraftProtection + CreditRating + NumCreditCardsHeld + NumHomesOwned + HouseholdSize + OwnYourHome + AverageBalance, data=CreditCardTrain, ntree=2000, mtry = 2, importance = TRUE, sampsize = nrow(CreditCardTrain), replace = TRUE)
+```
+
+Variable Importance
+
+```{r}
+View(forest$importance)
+```
+
+ROC Curve-Random Forest
+
+```{r}
+pred <- as.numeric(predict(forest, type="prob", newdata=CreditCardTest)[,2])
+New_ROC_Predictions <- prediction(predictions = pred, labels = CreditCardTest$OfferAccepted)
+New_ROC_Performance <- performance(New_ROC_Predictions, "sens", "fpr")
+plot(New_ROC_Performance, xlab = "False Positive Rate (1 - Specificity)", ylab="Sensitivity")
+NewAUC <- performance(New_ROC_Predictions, "auc")
+NewAUC <- as.numeric(NewAUC@y.values[1])
+text(0.8,0.2, paste("AUC = " , round(NewAUC,3)))
+abline(0,1)
+```
