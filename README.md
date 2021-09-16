@@ -1,0 +1,2 @@
+# Credit-Card-Marketing
+You work for a credit card company and are interested in predicting which potential customers will respond positively to a credit card offer in the mail. There are two options: postcards and letters. Letters are cheaper to print and send, but might have worse response rates. You need to build a model to identify which customers should be marketed to, and which option we should be sent to them.
